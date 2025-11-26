@@ -1,4 +1,4 @@
-# automated-vrchat-world-build
+# Automated VRChat World Builder
 A proof of concept C# script to automate building and uploading worlds to VRChat
 
 
