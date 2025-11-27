@@ -11,8 +11,8 @@ using VRC.SDKBase.Editor.Api;
 
 public static class AutoVRCUploader
 {
-    // Defaults (should be overridden via CLI args, or I guess you can hardcode them if you really wanted)
-    private static string scenePath = "Assets/Scenes/main.unity";
+    // Defaults (can be overridden via CLI args)
+    private static string scenePath = "Assets/scenes/main.unity";
     private static string thumbnailPath = "Assets/Editor/thumbnail.png";
     private static string worldName = "A whole new world";
     private static string worldId = "wrld_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx";
@@ -22,6 +22,14 @@ public static class AutoVRCUploader
   
     private static bool isCli = false;
     private static bool initialized = false;
+
+    private enum BuildPlatform
+    {
+        PC,
+        Android
+    }
+
+    private static BuildPlatform buildPlatform = BuildPlatform.PC;
 
     // Entry points
     [MenuItem("Tools/AutoVRCUploader/Upload World")]
@@ -39,6 +47,41 @@ public static class AutoVRCUploader
         ApplyCLIArgs();
         PrepareAndStartUploader();
     }
+
+    private static async Task EnsureBuildTargetAsync()
+    {
+        Debug.Log($"[Uploader] Ensuring build target for platform: {buildPlatform}");
+
+        switch (buildPlatform)
+        {
+            case BuildPlatform.PC:
+                await SetBuildTargetAsync(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64);
+                break;
+
+            case BuildPlatform.Android:
+                await SetBuildTargetAsync(BuildTargetGroup.Android, BuildTarget.Android);
+                break;
+        }
+    }
+
+    private static async Task SetBuildTargetAsync(BuildTargetGroup group, BuildTarget target)
+    {
+        if (EditorUserBuildSettings.activeBuildTarget == target)
+        {
+            Debug.Log("[Uploader] Build target already correct.");
+            return;
+        }
+
+        Debug.Log($"[Uploader] Switching Unity build target to {target}...");
+
+        bool result = EditorUserBuildSettings.SwitchActiveBuildTarget(group, target);
+
+        if (!result)
+            throw new Exception($"[Uploader] Failed to switch Unity build target to: {target}");
+
+        Debug.Log($"[Uploader] Build target switched to {target}.");
+    }
+
 
     private static void PrepareAndStartUploader()
     {
@@ -179,6 +222,8 @@ public static class AutoVRCUploader
     {
         Debug.Log($"[Uploader] Using: Scene: {scenePath}, Thumbnail: {thumbnailPath}, World Name: {worldName}, World ID: {worldId}");
 
+        await EnsureBuildTargetAsync();
+
         if (!System.IO.File.Exists(scenePath)) throw new Exception($"Scene not found: {scenePath}");
         if (!System.IO.File.Exists(thumbnailPath)) throw new Exception($"Thumbnail not found: {thumbnailPath}");
 
@@ -287,6 +332,24 @@ public static class AutoVRCUploader
         thumbnailPath = GetArg("thumbnail") ?? thumbnailPath;
         worldName = GetArg("name") ?? worldName;
         worldId = GetArg("id") ?? worldId;
+
+        string platformArg = GetArg("platform")?.ToLowerInvariant();
+        switch (platformArg)
+        {
+            case "android":
+                buildPlatform = BuildPlatform.Android;
+                break;
+
+            case "pc":
+            case null:
+                buildPlatform = BuildPlatform.PC;
+                break;
+
+            default:
+                Debug.LogWarning($"[Uploader] Unknown platform '{platformArg}', defaulting to PC.");
+                buildPlatform = BuildPlatform.PC;
+                break;
+        }
 
         Debug.Log("[Uploader] CLI arguments applied.");
     }
