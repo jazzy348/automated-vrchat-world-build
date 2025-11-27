@@ -9,4 +9,4 @@ In our workflow I have a webhook from our Git repository which triggers the buil
 
 Place this script into your Unity project then open Unity via CLI with the following:
 
-"${Path/To/Unity.exe}" -projectPath /path/to/project/ -executeMethod AutoVRCUploader.UploadWorldCLI -- --scene=Assets/Scenes/main.unity --thumbnail=Assets/Editor/thumbnail.png --name="World Name" --id="VRC World ID" -logFile /path/to/log/file
+"${Path/To/Unity.exe}" -projectPath /path/to/project/ -executeMethod AutoVRCUploader.UploadWorldCLI -- --scene=Assets/Scenes/main.unity --thumbnail=Assets/Editor/thumbnail.png --name="World Name" --id="VRC World ID" --platform="pc|android" -logFile /path/to/log/file
