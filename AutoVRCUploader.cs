@@ -8,6 +8,7 @@ using UnityEngine;
 using VRC.SDK3.Editor;
 using VRC.SDKBase.Editor;
 using VRC.SDKBase.Editor.Api;
+using VRC.Core;
 using UnityEditor.Experimental; // in case some APIs needed
 
 public static class AutoVRCUploader
@@ -51,7 +52,7 @@ public static class AutoVRCUploader
         Debug.Log("[Uploader] CLI entry point reached.");
         ApplyCLIArgs();
 
-        // persist the fact that a CLI upload started so we can resume after assembly reloads
+        // Persist the fact that a CLI upload started so we can resume after assembly reloads
         SessionState.SetString(Session_CLIArgs, string.Join("|",
             new[] { scenePath, thumbnailPath, worldName, worldId, buildPlatform.ToString() }));
         SessionState.SetBool(Session_UploadPending, true);
@@ -219,7 +220,7 @@ public static class AutoVRCUploader
     {
         if (string.IsNullOrEmpty(contentId))
         {
-            Debug.LogError("[Uploader] contentId is null/empty – cannot pre-agree");
+            Debug.LogError("[Uploader] contentId is null/empty — cannot pre-agree");
             return;
         }
 
@@ -280,6 +281,45 @@ public static class AutoVRCUploader
         Debug.Log($"[Uploader] Pre-agreed for {contentId}");
     }
 
+    private static void SetBlueprintId(string blueprintId)
+    {
+        if (string.IsNullOrEmpty(blueprintId))
+        {
+            Debug.LogWarning("[Uploader] Blueprint ID is null or empty. Skipping PipelineManager update.");
+            return;
+        }
+
+        // Find the PipelineManager in the currently loaded scene
+        PipelineManager pipelineManager = UnityEngine.Object.FindObjectOfType<PipelineManager>();
+
+        if (pipelineManager == null)
+        {
+            Debug.LogError("[Uploader] No PipelineManager found in scene! Make sure the scene has a VRChat World descriptor.");
+            throw new Exception("PipelineManager not found in scene.");
+        }
+
+        string currentId = pipelineManager.blueprintId;
+        
+        if (currentId == blueprintId)
+        {
+            Debug.Log($"[Uploader] Blueprint ID already set to: {blueprintId}");
+            return;
+        }
+
+        Debug.Log($"[Uploader] Updating Blueprint ID from '{currentId}' to '{blueprintId}'");
+        
+        // Set the new blueprint ID
+        pipelineManager.blueprintId = blueprintId;
+        
+        // Mark the PipelineManager as dirty so Unity saves the change
+        EditorUtility.SetDirty(pipelineManager);
+        
+        // Save the scene to persist the change
+        EditorSceneManager.SaveOpenScenes();
+        
+        Debug.Log($"[Uploader] Blueprint ID successfully set to: {blueprintId}");
+    }
+
     private static async Task UploadWorldAsync()
     {
         Debug.Log($"[Uploader] Using: Scene: {scenePath}, Thumbnail: {thumbnailPath}, World Name: {worldName}, World ID: {worldId}");
@@ -293,6 +333,8 @@ public static class AutoVRCUploader
         var scene = EditorSceneManager.OpenScene(scenePath, OpenSceneMode.Single);
         if (!scene.IsValid()) throw new Exception("Failed to open scene.");
         Debug.Log("[Uploader] Scene opened.");
+
+        SetBlueprintId(worldId);
 
         // Wait for login
         while (VRC.Core.APIUser.CurrentUser == null)
@@ -328,7 +370,7 @@ public static class AutoVRCUploader
             Debug.Log($"[Uploader] Build attempt {i}/{maxAttempts}...");
             CancellationTokenSource cts = new CancellationTokenSource();
 
-            // Start heartbeat logger to ensure something is logged periodically during long uploads.
+            // Start heartbeat logger to ensure something is logged periodically during long uploads (for management apps)
             var hbTask = Task.Run(async () =>
             {
                 try
@@ -380,7 +422,7 @@ public static class AutoVRCUploader
         throw new TimeoutException("Timed out waiting for IVRCSdkWorldBuilderApi.");
     }
 
-private static void ApplyCLIArgs()
+    private static void ApplyCLIArgs()
     {
         string[] args = Environment.GetCommandLineArgs();
 
