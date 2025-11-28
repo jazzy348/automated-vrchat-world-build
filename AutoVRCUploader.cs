@@ -8,6 +8,7 @@ using UnityEngine;
 using VRC.SDK3.Editor;
 using VRC.SDKBase.Editor;
 using VRC.SDKBase.Editor.Api;
+using UnityEditor.Experimental; // in case some APIs needed
 
 public static class AutoVRCUploader
 {
@@ -19,7 +20,11 @@ public static class AutoVRCUploader
     private const int AgreementVersion = 1;
     private const string AgreementCode = "content.copyright.owned";
     private const string SessionKey = "VRCSdkControlPanel.CopyrightAgreement.ContentList";
-  
+
+    // Session persistence keys
+    private const string Session_UploadPending = "AutoVRCUploader.Pending";
+    private const string Session_CLIArgs = "AutoVRCUploader.CLIArgs";
+
     private static bool isCli = false;
     private static bool initialized = false;
 
@@ -45,7 +50,55 @@ public static class AutoVRCUploader
         isCli = true;
         Debug.Log("[Uploader] CLI entry point reached.");
         ApplyCLIArgs();
+
+        // persist the fact that a CLI upload started so we can resume after assembly reloads
+        SessionState.SetString(Session_CLIArgs, string.Join("|",
+            new[] { scenePath, thumbnailPath, worldName, worldId, buildPlatform.ToString() }));
+        SessionState.SetBool(Session_UploadPending, true);
+
         PrepareAndStartUploader();
+    }
+
+    // This runs after domain reloads as well — Resume if pending
+    [InitializeOnLoadMethod]
+    private static void InitializeOnLoad()
+    {
+        // If we were left mid-upload due to assembly reload, resume
+        if (SessionState.GetBool(Session_UploadPending, false))
+        {
+            var saved = SessionState.GetString(Session_CLIArgs, null);
+            if (!string.IsNullOrEmpty(saved))
+            {
+                try
+                {
+                    var parts = saved.Split('|');
+                    if (parts.Length >= 5)
+                    {
+                        scenePath = parts[0];
+                        thumbnailPath = parts[1];
+                        worldName = parts[2];
+                        worldId = parts[3];
+                        var plat = parts[4];
+                        buildPlatform = plat.Equals("Android", StringComparison.OrdinalIgnoreCase)
+                            ? BuildPlatform.Android
+                            : BuildPlatform.PC;
+                        isCli = true;
+                        Debug.Log("[Uploader] Resuming pending CLI upload after assembly reload.");
+                        PrepareAndStartUploader();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogError("[Uploader] Failed to restore session: " + ex);
+                    SessionState.EraseString(Session_CLIArgs);
+                    SessionState.SetBool(Session_UploadPending, false);
+                }
+            }
+            else
+            {
+                SessionState.SetBool(Session_UploadPending, false);
+            }
+        }
     }
 
     private static async Task EnsureBuildTargetAsync()
@@ -82,7 +135,6 @@ public static class AutoVRCUploader
         Debug.Log($"[Uploader] Build target switched to {target}.");
     }
 
-
     private static void PrepareAndStartUploader()
     {
         if (initialized) return;
@@ -118,6 +170,8 @@ public static class AutoVRCUploader
             if (builderApi == null)
             {
                 Debug.LogError("[Uploader] Builder API not available after timeout. Aborting.");
+                // clear session pending so we don't spin forever
+                SessionState.SetBool(Session_UploadPending, false);
                 if (isCli)
                 {
                     EditorApplication.Exit(1);
@@ -137,15 +191,23 @@ public static class AutoVRCUploader
         {
             await UploadWorldAsync();
             Debug.Log("[Uploader] Upload completed — exiting Unity.");
+
+            // clear pending marker
+            SessionState.SetBool(Session_UploadPending, false);
+            SessionState.EraseString(Session_CLIArgs);
+
             if (isCli)
             {
                 EditorApplication.Exit(0);
             }
-            
+
         }
         catch (Exception ex)
         {
             Debug.LogError("[Uploader] Upload FAILED:\n" + ex);
+            SessionState.SetBool(Session_UploadPending, false);
+            SessionState.EraseString(Session_CLIArgs);
+
             if (isCli)
             {
                 EditorApplication.Exit(1);
@@ -318,7 +380,7 @@ public static class AutoVRCUploader
         throw new TimeoutException("Timed out waiting for IVRCSdkWorldBuilderApi.");
     }
 
-    private static void ApplyCLIArgs()
+private static void ApplyCLIArgs()
     {
         string[] args = Environment.GetCommandLineArgs();
 
