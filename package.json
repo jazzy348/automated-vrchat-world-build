@@ -1,0 +1,29 @@
+{
+  "name": "automated-vrc-world-builder",
+  "version": "1.0.0",
+  "description": "Example code for how to use AutoVRCUploader",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jazzy348/automated-vrchat-world-build.git"
+  },
+  "keywords": [
+    "vrchat",
+    "world",
+    "upload",
+    "automate",
+    "automated"
+  ],
+  "author": "Jazzy Senpai",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/jazzy348/automated-vrchat-world-build/issues"
+  },
+  "homepage": "https://github.com/jazzy348/automated-vrchat-world-build#readme",
+  "dependencies": {
+    "child_process": "^1.0.2"
+  }
+}
